@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>WebSockets - Chat</title>
+</head>
+
+<body>
+    <main>
+    <h1>Chat da turma</h1>
+    <p class="descricao">Um espaço para conversar durante a aula.</p>
+    <div class="informacoes">
+    <p id="status" role="status">Conectando...</p>
+    <p id="participantes">Conexões abertas: 0</p>
+    </div>
+    <h2>Mensagens</h2>
+    <div id="chatbox" class="message-screen" role="log" aria-label="Mensagens da turma"></div>
+    <form id="conversa" class="inputField" onsubmit="EnviaTexto(); return false;">
+        <div class="inputGroup">
+            <label for="name">Seu nome</label>
+            <input type="text" placeholder="Como você se chama?" id="name" name="name" maxlength="40" required>
+        </div>
+
+        <div class="inputGroup">
+            <label for="msg">Mensagem</label>
+            <input type="text" id="msg" placeholder="Escreva uma mensagem" name="msg" maxlength="1000" autocomplete="off" required>
+        </div>
+
+        <input id="enviar" type="submit" value="Enviar" disabled>
+    </form>
+    </main>
+    <script>
+        // Usa o mesmo servidor da pagina, inclusive quando acessada pelo IP na rede.
+        var protocolo = window.location.protocol === "https:" ? "wss://" : "ws://";
+        var ws = new WebSocket(protocolo + window.location.host + "/websocket");
+        // A interface acompanha o estado da conexao.
+        ws.onopen = function () {
+            document.getElementById("status").textContent = "Conectado ao chat";
+            document.getElementById("enviar").disabled = false;
+        };
+        ws.onclose = function () {
+            document.getElementById("status").textContent = "Desconectado. Recarregue a página para reconectar.";
+            document.getElementById("participantes").textContent = "Conexões abertas: indisponível";
+            document.getElementById("enviar").disabled = true;
+        };
+        ws.onerror = function () {
+            document.getElementById("status").textContent = "Erro de conexão com o servidor.";
+        };
+        ws.onmessage = function (evento) {
+            // O tipo diferencia mensagens de conversa e atualizacoes do contador.
+            const dados = JSON.parse(evento.data);
+            if (dados.tipo === "participantes") {
+                document.getElementById("participantes").textContent = "Conexões abertas: " + dados.total;
+                return;
+            }
+            if (dados.tipo === "erro") {
+                document.getElementById("status").textContent = dados.texto;
+                return;
+            }
+
+            const bloco = document.createElement("div");
+            bloco.className = "msgBody";
+            const nome = document.createElement("p");
+            nome.className = "username";
+            nome.textContent = dados.nome + " diz:";
+            const texto = document.createElement("p");
+            texto.className = "message";
+            // textContent mostra o texto sem executar HTML enviado por usuarios.
+            texto.textContent = dados.texto;
+            const hora = document.createElement("span");
+            hora.className = "time";
+            hora.textContent = dados.hora;
+            bloco.append(nome, texto, hora);
+            const caixa = document.getElementById("chatbox");
+            caixa.appendChild(bloco);
+            caixa.scrollTop = caixa.scrollHeight;
+        };
+
+        function EnviaTexto() {
+            if (ws.readyState !== WebSocket.OPEN) return;
+            const nome = document.getElementById("name").value.trim();
+            const campo = document.getElementById("msg");
+            const texto = campo.value.trim();
+            if (!nome || !texto) return;
+
+            // O servidor recebe JSON e distribui a resposta, inclusive ao remetente.
+            ws.send(JSON.stringify({nome: nome, texto: texto}));
+            campo.value = "";
+            campo.focus();
+        }
+    </script>
+
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; background: #f2f3f1; color: #303a36; font: 16px/1.5 Arial, sans-serif; }
+        main { max-width: 860px; margin: 40px auto; padding: 30px; background: white; border: 1px solid #d9dfda; border-top: 4px solid #47745b; border-radius: 6px; }
+        h1 { margin: 0 0 8px; font-size: 26px; }
+        .descricao { margin: 0; color: #626c66; }
+        .informacoes { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 18px 0; color: #59635d; font-size: 13px; }
+        .informacoes p { margin: 0; }
+        h2 { margin: 0 0 10px; font-size: 17px; }
+        .message-screen { height: 340px; overflow-y: auto; padding: 16px; background: #f4f7f4; border: 1px solid #dce2dd; border-radius: 4px; }
+        .message-screen:empty::before { content: "Nenhuma mensagem por enquanto. Comece a conversa!"; color: #68736b; font-size: 14px; }
+        .msgBody { width: fit-content; max-width: 85%; margin-bottom: 12px; padding: 10px 14px; background: white; border: 1px solid #dce2dd; border-radius: 6px; overflow-wrap: anywhere; }
+        .username { margin: 0 0 4px; color: #3c674e; font-size: 13px; font-weight: bold; }
+        .message { margin: 0; white-space: pre-wrap; }
+        .time { display: block; margin-top: 5px; text-align: right; font-size: 11px; color: #6b756e; }
+        .inputField { display: flex; align-items: end; gap: 12px; margin-top: 20px; }
+        .inputGroup { min-width: 0; flex: 1; }
+        .inputGroup:nth-child(2) { flex: 2; }
+        label { display: block; margin-bottom: 6px; font-size: 14px; font-weight: bold; }
+        input { width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid #bfc9c1; border-radius: 4px; font: inherit; }
+        input[type="submit"] { width: auto; padding: 11px 22px; border-color: #3c644d; background: #47745b; color: white; cursor: pointer; }
+        input[type="submit"]:hover:not(:disabled) { background: #365d46; }
+        input:disabled { opacity: .55; cursor: default; }
+        input:focus-visible { outline: 2px solid #47745b; outline-offset: 3px; }
+        @media (max-width: 600px) { main { margin: 16px; padding: 20px; } .inputField { flex-direction: column; align-items: stretch; } .message-screen { height: 300px; } .msgBody { max-width: 100%; } }
+    </style>
+</body>
+
+</html>
